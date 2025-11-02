@@ -53,3 +53,21 @@ Deploy the Worker and Durable Object:
 
 ```bash
 wrangler deploy
+
+curl -X POST "[https://your-worker.your-subdomain.workers.dev/itinerary](https://your-worker.your-subdomain.workers.dev/itinerary)" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "destination": "Seoul, South Korea",
+    "duration": "7 days",
+    "interests": ["K-pop", "street food", "history"],
+    "budget": "high",
+    "session_id": "user-a1b2c3d4"
+  }'
+
+
+curl -X POST "[https://your-worker.your-subdomain.workers.dev/chat](https://your-worker.your-subdomain.workers.dev/chat)" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "What is the best way to get from the airport?",
+    "session_id": "user-a1b2c3d4"
+  }'
