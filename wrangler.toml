@@ -1,5 +1,5 @@
 name = "cf-ai-travel-planner"
-main = "src/worker.js"
+main = "worker.js" # Changed from src/worker.js
 compatibility_date = "2023-10-01"
 
 # Durable Object bindings for Memory/State
@@ -15,7 +15,7 @@ new_classes = ["SessionManager"]
 [[ai.bindings]]
 binding = "AI"
 
-# Optional: Add Pages deployment config here if you build a frontend later
-# [[pages_build_output]]
-# name = "cf-ai-travel-planner-frontend"
-# path = "src/pages/dist"
+# --- Cloudflare Pages Configuration ---
+# Telling Pages to look for the frontend files in the root 'pages' folder.
+[pages_build_output]
+path = "pages"
