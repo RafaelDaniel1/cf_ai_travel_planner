@@ -1,0 +1,21 @@
+name = "cf-ai-travel-planner"
+main = "src/worker.js"
+compatibility_date = "2023-10-01"
+
+# Durable Object bindings for Memory/State
+[[durable_objects.bindings]]
+name = "SESSION_MANAGER"
+class_name = "SessionManager"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["SessionManager"]
+
+# AI binding for LLM
+[[ai.bindings]]
+binding = "AI"
+
+# Optional: Add Pages deployment config here if you build a frontend later
+# [[pages_build_output]]
+# name = "cf-ai-travel-planner-frontend"
+# path = "src/pages/dist"
