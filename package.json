@@ -1,0 +1,23 @@
+{
+  "name": "cf-ai-travel-planner",
+  "version": "1.0.0",
+  "description": "AI-powered travel itinerary generator using Cloudflare Workers",
+  "main": "src/worker.js",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "deploy": "wrangler deploy",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "cloudflare",
+    "ai",
+    "travel",
+    "llm",
+    "workers"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}
