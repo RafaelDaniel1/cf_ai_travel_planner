@@ -1,6 +1,6 @@
 // script.js
 
-const WORKER_API_URL = 'https://22527da8.smart-travel-planner.pages.dev/'; 
+const WORKER_API_URL = 'https://22527da8.smart-travel-planner.pages.dev'; 
 
 let sessionId = localStorage.getItem('travel_session_id') || `session-${Date.now()}`;
 let userPreferences = {};
