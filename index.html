@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Travel Planner - AI Chat</title>
+    <style>
+        body { font-family: sans-serif; margin: 0; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .container { background-color: #fff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); width: 90%; max-width: 600px; display: flex; flex-direction: column; height: 80vh; max-height: 700px; }
+        header { padding: 15px; background-color: #004d99; color: white; border-top-left-radius: 8px; border-top-right-radius: 8px; text-align: center; }
+        #chat-window { flex-grow: 1; padding: 20px; overflow-y: auto; background-color: #e9eef0; }
+        .message { margin-bottom: 15px; display: flex; }
+        .user-msg { justify-content: flex-end; }
+        .ai-msg { justify-content: flex-start; }
+        .user-msg .content { background-color: #007bff; color: white; border-radius: 18px 18px 0 18px; padding: 10px 15px; max-width: 80%; }
+        .ai-msg .content { background-color: #f0f0f0; color: #333; border-radius: 18px 18px 18px 0; padding: 10px 15px; max-width: 80%; }
+        #input-area { display: flex; border-top: 1px solid #ccc; padding: 10px; }
+        #chat-input { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 20px; margin-right: 10px; font-size: 16px; }
+        #send-button { background-color: #004d99; color: white; border: none; padding: 10px 15px; border-radius: 20px; cursor: pointer; transition: background-color 0.2s; }
+        #send-button:hover { background-color: #003366; }
+        .loading { text-align: center; padding: 10px; font-style: italic; color: #666; }
+        .preferences { background-color: #e0f7fa; padding: 10px; margin-bottom: 10px; border-radius: 5px; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h3>Cloudflare AI Travel Planner ✈️</h3>
+        </header>
+        <div id="chat-window">
+            <div class="message ai-msg">
+                <div class="content">Hello! I'm your Smart Travel Planner. Where do you want to go, for how long, and what's your budget? (e.g., *Paris, 3 days, medium budget*)</div>
+            </div>
+            <div id="loading-indicator" class="loading" style="display: none;">AI is thinking...</div>
+        </div>
+        <div id="input-area">
+            <input type="text" id="chat-input" placeholder="Ask me about your trip or preferences...">
+            <button id="send-button">Send</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
