@@ -1,0 +1,291 @@
+# AI Prompts Used in Development
+
+This document contains the core AI prompts used to design and generate the code for the Smart Travel Planner application. All code was reviewed, tested, and modified for originality and Cloudflare platform compatibility.
+
+## 1. Application Architecture Planning (Initial Design)
+
+**Prompt:**
+I need to build an AI-powered travel planning application on Cloudflare's stack. Requirements: Use Llama 3.3 via Workers AI; Implement workflow coordination (Workflows/Workers/Durable Objects); Include user input via chat; Add memory/state management. Must be original work. Please design the application architecture and suggest key components (Worker, Durable Object class, routing).
+
+## 2. Worker and Durable Object Integration
+
+**Prompt:**
+Write a Cloudflare Worker that: Uses Workers AI with Llama 3.3 70B model; Has endpoints for /itinerary (POST) and /chat (POST); Integrates with a Durable Object class called SessionManager for session storage; Handles CORS for web frontend; Includes robust error handling. Also, create the SessionManager Durable Object class for storing user preferences, conversation history, and itinerary state, including methods for getting/setting session data.
+
+## 3. Prompt Engineering for Itinerary Generation
+
+**Prompt:**
+Create an effective system prompt for Llama 3.3 70B to act as an expert travel planner for the `/itinerary` endpoint. The prompt must instruct the model to: Create detailed, practical itineraries; Consider budget and interests; Suggest local experiences; and, **Crucially, format its entire response as a structured JSON object** with keys for `destination`, `duration`, `budget`, `summary`, `dailyItinerary` (array), `travelTips` (array), and `estimatedCost` (object).
+
+## 4. Prompt Engineering for Chat/Memory
+
+**Prompt:**
+Create an effective system prompt for Llama 3.3 70B for the `/chat` endpoint. The prompt must instruct the model to act as a helpful travel assistant, leveraging the provided session context (Destination, Duration, Interests, Budget) passed from the Durable Object. It should be conversational, ask clarifying questions, and maintain context based on the conversation history provided in the messages array.
+
+---
+
+## 3. `src/worker.js` (The main application logic and DO class)
+
+```javascript
+// src/worker.js
+// Cloudflare Worker and Durable Object Implementation
+
+/**
+ * Durable Object Class for Session Management (Memory/State)
+ */
+export class SessionManager {
+  constructor(state, env) {
+    this.state = state;
+    this.storage = state.storage;
+    // Set a session expiration (e.g., 7 days in milliseconds)
+    this.SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+  }
+
+  async initialize() {
+    let data = await this.storage.get('session');
+    if (!data) {
+      data = {
+        preferences: {},
+        conversation: [],
+        itineraries: [],
+        createdAt: Date.now(),
+      };
+      // Set the alarm to clean up the session
+      await this.storage.setAlarm(Date.now() + this.SESSION_TTL_MS);
+      await this.storage.put('session', data);
+    }
+    this.data = data;
+  }
+
+  async setPreferences(prefs) {
+    await this.initialize();
+    this.data.preferences = { ...this.data.preferences, ...prefs };
+    await this.storage.put('session', this.data);
+  }
+
+  async addMessage(role, content) {
+    await this.initialize();
+    this.data.conversation.push({ role, content, timestamp: Date.now() });
+    // Keep conversation history capped to prevent passing huge context to the LLM
+    if (this.data.conversation.length > 20) {
+        this.data.conversation = this.data.conversation.slice(-20);
+    }
+    await this.storage.put('session', this.data);
+  }
+
+  async addItinerary(itinerary) {
+    await this.initialize();
+    this.data.itineraries.push(itinerary);
+    await this.storage.put('session', this.data);
+  }
+
+  async getSession() {
+    await this.initialize();
+    return this.data;
+  }
+  
+  // Clean up storage when the alarm fires
+  async alarm() {
+      await this.storage.deleteAll();
+  }
+}
+
+/**
+ * Main Cloudflare Worker (Orchestration/Workflow)
+ */
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const path = url.pathname;
+
+    // Handle CORS preflight for all endpoints
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        },
+      });
+    }
+
+    try {
+      if (path === '/itinerary' && request.method === 'POST') {
+        return await handleItineraryRequest(request, env);
+      } else if (path === '/chat' && request.method === 'POST') {
+        return await handleChatRequest(request, env);
+      } else {
+        return jsonResponse({ error: 'Not found' }, 404);
+      }
+    } catch (error) {
+      console.error('Workflow Error:', error);
+      return jsonResponse({ error: 'Internal server error during processing' }, 500);
+    }
+  },
+};
+
+/**
+ * Handles the main itinerary generation workflow.
+ * 1. Read input.
+ * 2. Get/create Durable Object (Memory).
+ * 3. Update DO preferences.
+ * 4. Call LLM for itinerary generation.
+ * 5. Update DO with generated itinerary.
+ * 6. Return response.
+ */
+async function handleItineraryRequest(request, env) {
+  const { destination, duration, interests, budget, session_id } = await request.json();
+  
+  if (!destination || !duration) {
+    return jsonResponse({ error: 'Destination and duration are required' }, 400);
+  }
+
+  // 1-2. Get or create session Durable Object
+  const id = env.SESSION_MANAGER.idFromName(session_id || 'default');
+  const stub = env.SESSION_MANAGER.get(id);
+  
+  // 3. Update session preferences
+  const prefs = { destination, duration, interests, budget };
+  await stub.setPreferences(prefs);
+
+  // 4. Generate itinerary using AI
+  const itinerary = await generateItinerary(env, prefs);
+
+  // 5. Store itinerary in session
+  await stub.addItinerary(itinerary);
+  
+  return jsonResponse({ itinerary, session_id: session_id || 'default' });
+}
+
+/**
+ * Handles conversational chat workflow.
+ * 1. Read input.
+ * 2. Get/create Durable Object (Memory).
+ * 3. Add user message to DO conversation history.
+ * 4. Retrieve conversation history and preferences from DO.
+ * 5. Call LLM with full context (Memory).
+ * 6. Add AI response to DO conversation history.
+ * 7. Return response.
+ */
+async function handleChatRequest(request, env) {
+  const { message, session_id } = await request.json();
+  
+  if (!message) {
+    return jsonResponse({ error: 'Message is required' }, 400);
+  }
+
+  // 1-2. Get or create session Durable Object
+  const id = env.SESSION_MANAGER.idFromName(session_id || 'default');
+  const stub = env.SESSION_MANAGER.get(id);
+  
+  // 3. Add user message
+  await stub.addMessage('user', message);
+
+  // 4. Get conversation history and preferences
+  const session = await stub.getSession();
+  
+  // 5. Generate AI response (passing the full context / Memory)
+  const responseText = await generateChatResponse(env, message, session.conversation, session.preferences);
+  
+  // 6. Add AI response
+  await stub.addMessage('assistant', responseText);
+
+  // 7. Return response
+  return jsonResponse({ 
+    response: responseText, 
+    session_id: session_id || 'default',
+    preferences: session.preferences
+  });
+}
+
+/**
+ * LLM call to Workers AI for structured Itinerary generation.
+ */
+async function generateItinerary(env, params) {
+  const systemPrompt = `You are an expert travel planner. Create detailed, practical itineraries that consider:
+- The destination's unique attractions and local experiences
+- User's interests: ${params.interests?.join(', ') || 'general sightseeing'}
+- User's budget: ${params.budget || 'medium'}
+- Logical daily schedules (e.g., Morning, Lunch, Afternoon, Evening)
+
+**IMPORTANT: Your entire response must be a single, valid JSON object.**
+
+JSON Structure:
+{
+  "destination": "string",
+  "duration": "string",  
+  "budget": "string",
+  "summary": "string describing the trip",
+  "dailyItinerary": [
+    {"day": 1, "theme": "string", "activities": ["string with time/location"]},
+    ...
+  ],
+  "travelTips": ["string", "string", ...],
+  "estimatedCost": {"flights": "string", "accommodation": "string", "daily_expenses": "string"}
+}
+`;
+
+  const userPrompt = `Create a ${params.duration} itinerary for ${params.destination}.`;
+
+  const response = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ],
+    max_tokens: 4000
+  });
+
+  // Attempt to parse the structured JSON response
+  try {
+    const text = response.response;
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    // Fallback if parsing fails
+    return { error: "Failed to parse structured JSON from AI", raw_response: text };
+  } catch (e) {
+    return { error: "JSON parsing exception", raw_response: response.response };
+  }
+}
+
+/**
+ * LLM call to Workers AI for conversational chat.
+ */
+async function generateChatResponse(env, message, conversation, preferences) {
+  const systemPrompt = `You are a helpful and engaging travel assistant. You are currently planning a trip for the user with the following context (use this context to inform your answers, but be conversational):
+Destination: ${preferences.destination || 'Not specified'}
+Duration: ${preferences.duration || 'Not specified'} 
+Interests: ${preferences.interests?.join(', ') || 'Not specified'}
+Budget: ${preferences.budget || 'Not specified'}
+
+Maintain the flow of the conversation, ask clarifying questions when needed, and provide helpful travel advice based on the user's history.`;
+
+  // Construct messages for the LLM, including system context and history
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...conversation.map(msg => ({ role: msg.role, content: msg.content })),
+    // The current user message is already in the conversation history from the DO call, 
+    // but we use the last message for the LLM input to ensure it's at the end.
+  ];
+
+  const response = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+    messages,
+    max_tokens: 2000
+  });
+
+  return response.response;
+}
+
+/**
+ * Helper function for JSON responses with CORS headers.
+ */
+function jsonResponse(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*', // Allows frontend to access the API
+    },
+  });
+}
