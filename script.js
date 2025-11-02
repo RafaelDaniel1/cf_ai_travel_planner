@@ -1,7 +1,6 @@
 // script.js
 
-// 🚨 IMPORTANT: Replace this with your actual deployed Cloudflare Worker URL (e.g., https://cf-ai-travel-planner.your-subdomain.workers.dev)
-const WORKER_API_URL = 'https://smart-travel-planner.pages.dev/'; 
+const WORKER_API_URL = 'https://22527da8.smart-travel-planner.pages.dev/'; 
 
 let sessionId = localStorage.getItem('travel_session_id') || `session-${Date.now()}`;
 let userPreferences = {};
